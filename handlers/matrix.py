@@ -146,9 +146,9 @@ async def recs_to_msg(id, active_type):
     msg = f"<b>- {TYPES[active_type]} -</b>\n\n"
     c = 1
     for r in records:
-        msg = msg + f"{c}. {r[2]}\n"
+        msg = msg + f"{c}. {r[3]}\n"
         if active_type == 0 or active_type == 2:
-            msg = msg + f"   <i>Срок выполнения до: <b>{r[4]}</b>\n</i>"
+            msg = msg + f"   <i>Срок выполнения до: <b>{r[5]}</b>\n</i>"
         c += 1
     return msg
 
@@ -162,7 +162,7 @@ async def matrix_remove_record(query: CallbackQuery, state: FSMContext):
     msg = query.message.text +\
     "\n\n<i>Выберите номер задачи, которую нужно закрыть:</i>"
     keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
-    keyboard.add(InlineKeyboardButton(text="Вернеться назад", callback_data="12312313213"))
+    keyboard.add(InlineKeyboardButton(text="Вернуться назад", callback_data="12312313213"))
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await RemoveRecordState.choosing.set()
 
@@ -172,8 +172,8 @@ async def matrix_remove_record_choosing(query: CallbackQuery, state: FSMContext)
         active_type = data["active_type"]
         data["query"] = query
         data["is_urgent"] = False if active_type == 0 or active_type == 2 else True
-    # db.remove_record(query.from_user.id, active_type, int(query.data))
-    print(db.remove_record(query.from_user.id, active_type, int(query.data)))
+    db.remove_record(query.from_user.id, active_type, int(query.data))
     keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
     await query.message.edit_text(text="<b>Запись удалена!</b>", reply_markup=keyboard, parse_mode="HTML")
     await RemoveRecordState.next()
