@@ -12,3 +12,10 @@ class Database():
     def get_records(self, user_id, type):
         result = self.cursor.execute("SELECT * FROM `records` WHERE `user_id` = ? AND `type` = ?", (user_id, type))
         return result.fetchall()
+    
+    def remove_record(self, user_id, type, number):
+        req = self.get_records(user_id, type)[number - 1]
+        print(req)
+        self.cursor.execute("DELETE FROM `records` WHERE `user_id` =? AND `type` = ? AND `record` = ? AND `description` =? AND `deadline` = ?", (req[0], req[1], req[2], req[3], req[4]))
+        self.conn.commit()
+        return True

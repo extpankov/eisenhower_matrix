@@ -5,6 +5,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from management.dispatcher import Bot, dp
 from database.Database import Database
 from .start_handler import start
+from scripts.numbers_keyboard import get_numbers_keyboard
 
 db = Database()
 TYPES = ['Важно и срочно', 'Важно и не срочно', 'Не важно и срочно', 'Не важно и не срочно']
@@ -13,6 +14,9 @@ class AddRecordState(StatesGroup):
     input_name = State()
     input_desc = State()
     input_date = State()
+
+class RemoveRecordState(StatesGroup):
+    choosing = State()
 
 @dp.callback_query_handler(text="goto_matrix")
 async def matrix(query: CallbackQuery):
@@ -77,7 +81,7 @@ async def matrix_goto_mm(query: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(text="matrix_edit")
 async def matrix_edit(query: CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.row(InlineKeyboardButton(text="Добавить", callback_data="matrix_add_record"), InlineKeyboardButton(text="Закрыть", callback_data="123123113"))
+    keyboard.row(InlineKeyboardButton(text="Добавить", callback_data="matrix_add_record"), InlineKeyboardButton(text="Закрыть", callback_data="matrix_remove_record"))
     keyboard.row(InlineKeyboardButton(text="Изменить", callback_data="213123123"), InlineKeyboardButton(text="Делегировать", callback_data="123123113"))
     keyboard.row(InlineKeyboardButton(text="Отметить выполнение", callback_data="12312321"))
     keyboard.row(InlineKeyboardButton(text="<-- Назад", callback_data="matrix_return"), InlineKeyboardButton(text="Вперёд -->", callback_data="matrix_forward"))
@@ -136,6 +140,7 @@ async def matrix_add_record_date(message: Message, state: FSMContext):
     f"Дата завершения: {new_record['deadline']}"
     await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
     await AddRecordState.next()
+
 async def recs_to_msg(id, active_type):
     records = db.get_records(id, active_type)
     msg = f"<b>- {TYPES[active_type]} -</b>\n\n"
@@ -146,3 +151,29 @@ async def recs_to_msg(id, active_type):
             msg = msg + f"   <i>Срок выполнения до: <b>{r[4]}</b>\n</i>"
         c += 1
     return msg
+
+@dp.callback_query_handler(text="matrix_remove_record")
+async def matrix_remove_record(query: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        active_type = data["active_type"]
+        data["query"] = query
+        data["query_message_text"] = query.message.text
+        data["is_urgent"] = False if active_type == 0 or active_type == 2 else True
+    msg = query.message.text +\
+    "\n\n<i>Выберите номер задачи, которую нужно закрыть:</i>"
+    keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
+    keyboard.add(InlineKeyboardButton(text="Вернеться назад", callback_data="12312313213"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await RemoveRecordState.choosing.set()
+
+@dp.callback_query_handler(state=RemoveRecordState.choosing)
+async def matrix_remove_record_choosing(query: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        active_type = data["active_type"]
+        data["query"] = query
+        data["is_urgent"] = False if active_type == 0 or active_type == 2 else True
+    # db.remove_record(query.from_user.id, active_type, int(query.data))
+    print(db.remove_record(query.from_user.id, active_type, int(query.data)))
+    keyboard = InlineKeyboardMarkup()
+    await query.message.edit_text(text="<b>Запись удалена!</b>", reply_markup=keyboard, parse_mode="HTML")
+    await RemoveRecordState.next()
