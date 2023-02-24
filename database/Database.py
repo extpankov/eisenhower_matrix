@@ -22,3 +22,16 @@ class Database():
         self.cursor.execute("DELETE FROM `records` WHERE `id` =?", (id,))
         self.conn.commit()
         return True
+    
+    def edit_record(self, user_id, type, number, name = None, desc = None, deadline = None):
+        id = self.__get_record_id(user_id, type, number)
+        if name == None and desc == None and deadline == None:
+            return None
+        if name != None:
+            self.cursor.execute("UPDATE `records` SET `record` =? WHERE `id` =?", (name, id))
+        elif desc!= None:
+            self.cursor.execute("UPDATE `records` SET `description` =? WHERE `id` =?", (desc, id))
+        elif deadline!= None:
+            self.cursor.execute("UPDATE `records` SET `deadline` =? WHERE `id` =?", (deadline, id))
+        self.conn.commit()
+        return True

@@ -18,6 +18,11 @@ class AddRecordState(StatesGroup):
 class RemoveRecordState(StatesGroup):
     choosing = State()
 
+class EditRecordState(StatesGroup):
+    choosing = State()
+    choosing_data = State()
+    editing_data = State()
+
 @dp.callback_query_handler(text="goto_matrix")
 async def matrix(query: CallbackQuery):
     msg = "<b>=== МАТРИЦА ЭЙЗЕНХАУЭРА ===</b>\n\n"+\
@@ -82,7 +87,7 @@ async def matrix_goto_mm(query: CallbackQuery, state: FSMContext):
 async def matrix_edit(query: CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.row(InlineKeyboardButton(text="Добавить", callback_data="matrix_add_record"), InlineKeyboardButton(text="Закрыть", callback_data="matrix_remove_record"))
-    keyboard.row(InlineKeyboardButton(text="Изменить", callback_data="213123123"), InlineKeyboardButton(text="Делегировать", callback_data="123123113"))
+    keyboard.row(InlineKeyboardButton(text="Изменить", callback_data="matrix_edit_record"), InlineKeyboardButton(text="Делегировать", callback_data="123123113"))
     keyboard.row(InlineKeyboardButton(text="Отметить выполнение", callback_data="12312321"))
     keyboard.row(InlineKeyboardButton(text="<-- Назад", callback_data="matrix_return"), InlineKeyboardButton(text="Вперёд -->", callback_data="matrix_forward"))
     await query.message.edit_reply_markup(keyboard)
@@ -90,10 +95,8 @@ async def matrix_edit(query: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(text="matrix_add_record")
 async def matrix_add_record(query: CallbackQuery, state: FSMContext):
     async with state.proxy() as data:
-        active_type = data["active_type"]
         data["query"] = query
         data["query_message_text"] = query.message.text
-        data["is_urgent"] = False if active_type == 0 or active_type == 2 else True
     msg = query.message.text +\
     "\n\n<i>Введите название задачи:</i>"
     await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
@@ -119,11 +122,24 @@ async def matrix_add_record_desc(message: Message, state: FSMContext):
         data["new_record"].update(desc = message.text)
         query = data["query"]
         query_message_text = data["query_message_text"]
+        active_type = data["active_type"]
+        new_record = data["new_record"]
     await message.delete()
-    msg = query_message_text +\
-    "\n\n<i>Введите дату завершения задачи:</i>"
-    await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
-    await AddRecordState.input_date.set()
+    is_urgent = False if active_type == 1 or active_type == 3 else True
+    if is_urgent:
+        msg = query_message_text +\
+        "\n\n<i>Введите дату завершения задачи:</i>"
+        await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
+        await AddRecordState.input_date.set()
+    else:
+        db.add_record(message.from_user.id, active_type, new_record["name"], new_record["desc"])
+        msg = "<b>Запись добавлена!</b>\n\n"+\
+        f"Название: {new_record['name']}\n" +\
+        f"Описание: {new_record['desc']}\n"
+        await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
+        for i in range(2):
+            await AddRecordState.next()
+
 
 @dp.message_handler(state=AddRecordState.input_date)
 async def matrix_add_record_date(message: Message, state: FSMContext):
@@ -158,7 +174,6 @@ async def matrix_remove_record(query: CallbackQuery, state: FSMContext):
         active_type = data["active_type"]
         data["query"] = query
         data["query_message_text"] = query.message.text
-        data["is_urgent"] = False if active_type == 0 or active_type == 2 else True
     msg = query.message.text +\
     "\n\n<i>Выберите номер задачи, которую нужно закрыть:</i>"
     keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
@@ -171,9 +186,84 @@ async def matrix_remove_record_choosing(query: CallbackQuery, state: FSMContext)
     async with state.proxy() as data:
         active_type = data["active_type"]
         data["query"] = query
-        data["is_urgent"] = False if active_type == 0 or active_type == 2 else True
     db.remove_record(query.from_user.id, active_type, int(query.data))
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
     await query.message.edit_text(text="<b>Запись удалена!</b>", reply_markup=keyboard, parse_mode="HTML")
     await RemoveRecordState.next()
+
+@dp.callback_query_handler(text="matrix_edit_record")
+async def matrix_edit_record(query: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        active_type = data["active_type"]
+        data["query"] = query
+        data["query_message_text"] = query.message.text
+    msg = query.message.text +\
+    "\n\n<i>Выберите номер задачи, которую нужно изменить:</i>"
+    keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
+    keyboard.add(InlineKeyboardButton(text="Вернуться назад", callback_data="12312313213"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await EditRecordState.choosing.set()
+
+@dp.callback_query_handler(state=EditRecordState.choosing)
+async def matrix_edit_record_choosing(query: CallbackQuery, state: FSMContext):
+    edit_record = [query.from_user.id, int(query.data)] # user`s id and record`s quantity number
+    async with state.proxy() as data:
+        data["query"] = query
+        data["edit_record"] = edit_record
+        active_type = data["active_type"]
+    is_urgent = False if active_type == 1 or active_type == 3 else True
+    rec = db.get_records(query.from_user.id, active_type)[int(query.data)-1]
+    start_msg = f"- {TYPES[active_type]} -\n" +\
+    f"{query.data}. {rec[4]}\n"
+
+    async with state.proxy() as data:
+        data["start_msg"] = start_msg
+        
+    msg = start_msg +\
+    f"  <i>Срок выполнения до:{rec[5]}</i>" +\
+    "\n\n<i>Выберите данные для изменения:</i>"
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.row(InlineKeyboardButton(text="Имя", callback_data="matrix_edit_name"), InlineKeyboardButton(text="Описание", callback_data="matrix_edit_desc"))
+    if is_urgent:
+        keyboard.add(InlineKeyboardButton(text="Дата завершения", callback_data="matrix_edit_deadline"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await EditRecordState.next()
+
+@dp.callback_query_handler(state=EditRecordState.choosing_data)
+async def matrix_edit_record_choosing_data(query: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        edit_record = data["edit_record"]
+        start_msg = data["start_msg"]
+    msg = start_msg
+    if query.data == "matrix_edit_name":
+        edit_record.append("name")
+        msg = msg + f"\n\n<i>Введите новое название задачи:</i>"
+    elif query.data == "matrix_edit_desc":
+        edit_record.append("desc")
+        msg = msg + f"\n\n<i>Введите новое описание задачи:</i>"
+    else:
+        edit_record.append("deadline")
+        msg = msg + f"\n\n<i>Введите новую дату завершения задачи:</i>"
+    keyboard = InlineKeyboardMarkup()
+    # кнопка вернуться назад
+    async with state.proxy() as data:
+        data["edit_record"] = edit_record
+        data["query"] = query
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await EditRecordState.next()
+
+@dp.message_handler(state=EditRecordState.editing_data)
+async def matrix_edit_record_editing_data(message: Message, state: FSMContext):
+    text = message.text
+    async with state.proxy() as data:
+        edit_record = data["edit_record"]
+        query = data["query"]
+    await message.delete()
+    if edit_record[2] == "name":
+        db.edit_record(query.from_user.id, edit_record[0], edit_record[1], name = text)
+    elif edit_record[2] == "desc":
+        db.edit_record(query.from_user.id, edit_record[0], edit_record[1], desc = text)
+    elif edit_record[2] == "deadline":
+        db.edit_record(query.from_user.id, edit_record[0], edit_record[1], deadline = text)
+        
