@@ -23,14 +23,22 @@ class EditRecordState(StatesGroup):
     choosing_data = State()
     editing_data = State()
 
+class DelegationRecordState(StatesGroup):
+    choosing = State()
+    choosing_new_type = State()
+
+class CompletionRecordState(StatesGroup):
+    choosing = State()
+    test13123 = State()
+
 @dp.callback_query_handler(text="goto_matrix")
 async def matrix(query: CallbackQuery):
     msg = "<b>=== МАТРИЦА ЭЙЗЕНХАУЭРА ===</b>\n\n"+\
     "Количество Ваших текущих задач:\n\n" +\
-    f"<b>Важно и срочно</b>: {len(db.get_records(query.from_user.id, 0))}\n" +\
-    f"<b>Важно и не срочно</b>: {len(db.get_records(query.from_user.id, 1))}\n" +\
-    f"<b>Не важно и срочно</b>: {len(db.get_records(query.from_user.id, 2))}\n" +\
-    f"<b>Не важно и не срочно</b>: {len(db.get_records(query.from_user.id, 3))}\n"
+    f"<b>Важно и срочно</b>: {len(db.get_records(query.from_user.id, 0)) - len(db.get_completed_records(query.from_user.id, 0))}\n" +\
+    f"<b>Важно и не срочно</b>: {len(db.get_records(query.from_user.id, 1)) - len(db.get_completed_records(query.from_user.id, 1))}\n" +\
+    f"<b>Не важно и срочно</b>: {len(db.get_records(query.from_user.id, 2)) - len(db.get_completed_records(query.from_user.id, 2))}\n" +\
+    f"<b>Не важно и не срочно</b>: {len(db.get_records(query.from_user.id, 3)) - len(db.get_completed_records(query.from_user.id, 3))}\n"
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.row(InlineKeyboardButton(text="Подробнее", callback_data="matrix_more"), InlineKeyboardButton(text="Назад", callback_data="mainmenu"))
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
@@ -87,8 +95,8 @@ async def matrix_goto_mm(query: CallbackQuery, state: FSMContext):
 async def matrix_edit(query: CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(row_width=2)
     keyboard.row(InlineKeyboardButton(text="Добавить", callback_data="matrix_add_record"), InlineKeyboardButton(text="Закрыть", callback_data="matrix_remove_record"))
-    keyboard.row(InlineKeyboardButton(text="Изменить", callback_data="matrix_edit_record"), InlineKeyboardButton(text="Делегировать", callback_data="123123113"))
-    keyboard.row(InlineKeyboardButton(text="Отметить выполнение", callback_data="12312321"))
+    keyboard.row(InlineKeyboardButton(text="Изменить", callback_data="matrix_edit_record"), InlineKeyboardButton(text="Делегировать", callback_data="matrix_delegation_record"))
+    keyboard.row(InlineKeyboardButton(text="Отметить выполнение", callback_data="matrix_complete_record"))
     keyboard.row(InlineKeyboardButton(text="<-- Назад", callback_data="matrix_return"), InlineKeyboardButton(text="Вперёд -->", callback_data="matrix_forward"))
     await query.message.edit_reply_markup(keyboard)
 
@@ -136,7 +144,9 @@ async def matrix_add_record_desc(message: Message, state: FSMContext):
         msg = "<b>Запись добавлена!</b>\n\n"+\
         f"Название: {new_record['name']}\n" +\
         f"Описание: {new_record['desc']}\n"
-        await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
+        keyboard = InlineKeyboardMarkup()
+        keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
+        await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
         for i in range(2):
             await AddRecordState.next()
 
@@ -157,14 +167,21 @@ async def matrix_add_record_date(message: Message, state: FSMContext):
     await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
     await AddRecordState.next()
 
-async def recs_to_msg(id, active_type):
+async def recs_to_msg(id, active_type, is_desc = None):
     records = db.get_records(id, active_type)
     msg = f"<b>- {TYPES[active_type]} -</b>\n\n"
     c = 1
     for r in records:
-        msg = msg + f"{c}. {r[3]}\n"
-        if active_type == 0 or active_type == 2:
-            msg = msg + f"   <i>Срок выполнения до: <b>{r[5]}</b>\n</i>"
+        if bool(int(r[6])) == True:
+            msg = msg + f"<del>{c}. {r[3]}</del>\n"
+            if active_type == 0 or active_type == 2:
+                msg = msg + f"   <del><i>Срок выполнения до: <b>{r[5]}</b>\n</i></del>"
+        else:
+            msg = msg + f"{c}. {r[3]}\n"
+            if active_type == 0 or active_type == 2:
+                msg = msg + f"   <i>Срок выполнения до: <b>{r[5]}</b>\n</i>"
+        if is_desc == True and r[4] != None:
+            msg = msg + f"   <i>Описание: {r[4]}\n</i>"
         c += 1
     return msg
 
@@ -186,7 +203,7 @@ async def matrix_remove_record_choosing(query: CallbackQuery, state: FSMContext)
     async with state.proxy() as data:
         active_type = data["active_type"]
         data["query"] = query
-    db.remove_record(query.from_user.id, active_type, int(query.data))
+    db.remove_record(query.from_user.id, active_type, int(query.data) - 1)
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
     await query.message.edit_text(text="<b>Запись удалена!</b>", reply_markup=keyboard, parse_mode="HTML")
@@ -207,7 +224,7 @@ async def matrix_edit_record(query: CallbackQuery, state: FSMContext):
 
 @dp.callback_query_handler(state=EditRecordState.choosing)
 async def matrix_edit_record_choosing(query: CallbackQuery, state: FSMContext):
-    edit_record = [query.from_user.id, int(query.data)] # user`s id and record`s quantity number
+    edit_record = [query.from_user.id, int(query.data) - 1] # user`s id and record`s quantity number
     async with state.proxy() as data:
         data["query"] = query
         data["edit_record"] = edit_record
@@ -220,13 +237,15 @@ async def matrix_edit_record_choosing(query: CallbackQuery, state: FSMContext):
     async with state.proxy() as data:
         data["start_msg"] = start_msg
         
-    msg = start_msg +\
-    f"  <i>Срок выполнения до:{rec[5]}</i>" +\
-    "\n\n<i>Выберите данные для изменения:</i>"
+    msg = start_msg
+    if is_urgent:
+        msg = msg + f"  <i>Срок выполнения до: {rec[5]}</i>"
+    msg = msg + "\n\n<i>Выберите данные для изменения:</i>"
     keyboard = InlineKeyboardMarkup(row_width=2)
-    keyboard.row(InlineKeyboardButton(text="Имя", callback_data="matrix_edit_name"), InlineKeyboardButton(text="Описание", callback_data="matrix_edit_desc"))
+    keyboard.row(InlineKeyboardButton(text="Название", callback_data="matrix_edit_name"), InlineKeyboardButton(text="Описание", callback_data="matrix_edit_desc"))
     if is_urgent:
         keyboard.add(InlineKeyboardButton(text="Дата завершения", callback_data="matrix_edit_deadline"))
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await EditRecordState.next()
 
@@ -246,7 +265,7 @@ async def matrix_edit_record_choosing_data(query: CallbackQuery, state: FSMConte
         edit_record.append("deadline")
         msg = msg + f"\n\n<i>Введите новую дату завершения задачи:</i>"
     keyboard = InlineKeyboardMarkup()
-    # кнопка вернуться назад
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
     async with state.proxy() as data:
         data["edit_record"] = edit_record
         data["query"] = query
@@ -259,11 +278,88 @@ async def matrix_edit_record_editing_data(message: Message, state: FSMContext):
     async with state.proxy() as data:
         edit_record = data["edit_record"]
         query = data["query"]
+        active_type = data["active_type"]
     await message.delete()
     if edit_record[2] == "name":
-        db.edit_record(query.from_user.id, edit_record[0], edit_record[1], name = text)
+        db.edit_record(query.from_user.id, active_type, edit_record[1], name = text)
     elif edit_record[2] == "desc":
-        db.edit_record(query.from_user.id, edit_record[0], edit_record[1], desc = text)
+        db.edit_record(query.from_user.id, active_type, edit_record[1], desc = text)
     elif edit_record[2] == "deadline":
-        db.edit_record(query.from_user.id, edit_record[0], edit_record[1], deadline = text)
-        
+        db.edit_record(query.from_user.id, active_type, edit_record[1], deadline = text)
+    
+    msg = "<b>Запись изменена!</b>\n\n"
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await EditRecordState.next()
+
+@dp.callback_query_handler(text="matrix_delegation_record")
+async def matrix_delegation_record(query: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        active_type = data["active_type"]
+        data["query"] = query
+        data["query_message_text"] = query.message.text
+    msg = query.message.text +\
+    "\n\n<i>Выберите номер задачи, которую нужно делегировать:</i>"
+    keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
+    keyboard.add(InlineKeyboardButton(text="Вернуться назад", callback_data="12312313213"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await DelegationRecordState.choosing.set()
+
+@dp.callback_query_handler(state=DelegationRecordState.choosing)
+async def matrix_delegation_record_choosing(query: CallbackQuery, state: FSMContext):
+    number = int(query.data) - 1
+    
+    async with state.proxy() as data:
+        text = data["query_message_text"]
+        data["delegation_record"] = [data["active_type"], number]
+
+    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.row(InlineKeyboardButton(text=TYPES[0], callback_data="0"), InlineKeyboardButton(text=TYPES[1], callback_data="1"))
+    keyboard.add(InlineKeyboardButton(text=TYPES[2], callback_data="2"), InlineKeyboardButton(text=TYPES[3], callback_data="3"))
+
+    msg = text +\
+    "\n\n<i>Выберите группу, в которую нужно делегировать выбранную задачу:</i>"
+
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await DelegationRecordState.next()
+    
+@dp.callback_query_handler(state=DelegationRecordState.choosing_new_type)
+async def matrix_delegation_record_choosing_new_type(query: CallbackQuery, state: FSMContext):
+    new_active_type = int(query.data)
+
+    async with state.proxy() as data:
+        delegation_record = data["delegation_record"]
+
+    db.delegate_record(query.from_user.id, delegation_record[0], delegation_record[1], new_active_type)
+
+    msg = "<b>Запись делегирована!</b>\n\n"
+    await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
+    await DelegationRecordState.next()
+
+@dp.callback_query_handler(text="matrix_complete_record")
+async def matrix_complete_record(query: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        active_type = data["active_type"]
+        data["query"] = query
+        data["query_message_text"] = query.message.text
+    msg = query.message.text +\
+    "\n\n<i>Выберите номер задачи, которую нужно отметить как выполненную:</i>"
+    keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
+    keyboard.add(InlineKeyboardButton(text="Вернуться назад", callback_data="12312313213"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    await CompletionRecordState.choosing.set()
+
+@dp.callback_query_handler(state=CompletionRecordState.choosing)
+async def matrix_complete_record_choosing(query: CallbackQuery, state: FSMContext):
+    number = int(query.data) - 1
+    
+    async with state.proxy() as data:
+        active_type = data["active_type"]
+
+    db.complete_record(query.from_user.id, active_type, number)
+
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
+    await query.message.edit_text("<b>Запись отмечена как выполненная!</b>", reply_markup=keyboard, parse_mode="HTML")
+    await CompletionRecordState.next()

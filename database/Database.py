@@ -13,6 +13,10 @@ class Database():
         result = self.cursor.execute("SELECT * FROM `records` WHERE `user_id` = ? AND `type` = ?", (user_id, type))
         return result.fetchall()
     
+    def get_completed_records(self, user_id, type):
+        result = self.cursor.execute("SELECT * FROM `records` WHERE `user_id` =? AND `type` =? AND `is_completed` = 1", (user_id, type))
+        return result.fetchall()
+    
     def __get_record_id(self, user_id, type, number):
         res = self.cursor.execute("SELECT * FROM `records` WHERE `user_id` =? AND `type` =?", (user_id, type)).fetchall()[number]
         return res[0]
@@ -33,5 +37,17 @@ class Database():
             self.cursor.execute("UPDATE `records` SET `description` =? WHERE `id` =?", (desc, id))
         elif deadline!= None:
             self.cursor.execute("UPDATE `records` SET `deadline` =? WHERE `id` =?", (deadline, id))
+        self.conn.commit()
+        return True
+    
+    def delegate_record(self, user_id, type, number, new_type):
+        id = self.__get_record_id(user_id, type, number)
+        self.cursor.execute("UPDATE `records` SET `type` =? WHERE `id` =?", (new_type, id))
+        self.conn.commit()
+        return True
+
+    def complete_record(self, user_id, type, number):
+        id = self.__get_record_id(user_id, type, number)
+        self.cursor.execute("UPDATE `records` SET `is_completed` = 1 WHERE `id` = ?", (id,))
         self.conn.commit()
         return True
