@@ -29,7 +29,6 @@ class DelegationRecordState(StatesGroup):
 
 class CompletionRecordState(StatesGroup):
     choosing = State()
-    test13123 = State()
 
 @dp.callback_query_handler(text="goto_matrix")
 async def matrix(query: CallbackQuery):
