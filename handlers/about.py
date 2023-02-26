@@ -10,6 +10,7 @@ async def goto_about(query: CallbackQuery):
     f"Текущая версия приложения: {VERSION}\n\n" +\
     "© Roman Pankov, 2023"
     keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard.add(InlineKeyboardButton(text="Страница проекта на GitHub", url="https://github.com/extpankov/eisenhower_matrix"))
     keyboard.add(InlineKeyboardButton(text="GitHub автора", url="https://github.com/extpankov"))
     keyboard.add(InlineKeyboardButton(text="Подробнее о Матрице", url="https://ru.wikipedia.org/wiki/Матрица_Эйзенхауэр"))
     keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="mainmenu"))

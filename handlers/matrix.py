@@ -163,7 +163,9 @@ async def matrix_add_record_date(message: Message, state: FSMContext):
     f"Название: {new_record['name']}\n" +\
     f"Описание: {new_record['desc']}\n" +\
     f"Дата завершения: {new_record['deadline']}"
-    await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await AddRecordState.next()
 
 async def recs_to_msg(id, active_type, is_desc = None):
