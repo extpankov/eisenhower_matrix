@@ -297,7 +297,9 @@ async def matrix_delegation_record_choosing_new_type(query: CallbackQuery, state
     db.delegate_record(query.from_user.id, delegation_record[0], delegation_record[1], new_active_type)
 
     msg = "<b>Запись делегирована!</b>\n\n"
-    await query.message.edit_text(text=msg, reply_markup=InlineKeyboardMarkup(), parse_mode="HTML")
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await DelegationRecordState.next()
 
 @dp.callback_query_handler(state=CompletionRecordState.choosing)
@@ -332,7 +334,6 @@ async def matrix_typed_form(query: CallbackQuery, state: FSMContext, type: int):
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await types_states[type].choosing.set()
 
-
 @dp.callback_query_handler(text="matrix_remove_record")
 async def matrix_remove_record(query: CallbackQuery, state: FSMContext):
     await matrix_typed_form(query, state, 0)
@@ -348,3 +349,9 @@ async def matrix_delegation_record(query: CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(text="matrix_complete_record")
 async def matrix_complete_record(query: CallbackQuery, state: FSMContext):
     await matrix_typed_form(query, state, 3)
+
+skip_states = [AddRecordState.input_desc, AddRecordState.input_date]
+for ss in skip_states:
+    @dp.callback_query_handler(text="skip", state=ss)
+    async def matrix_skip(query: CallbackQuery, state: FSMContext):
+        print("text")
