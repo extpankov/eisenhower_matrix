@@ -229,6 +229,13 @@ async def matrix_edit_record_choosing(query: CallbackQuery, state: FSMContext):
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await EditRecordState.next()
 
+# !!
+@dp.callback_query_handler(text="matrix_goto_mm", state=EditRecordState.choosing_data)
+async def matrix_edit_goto_mm(query: CallbackQuery, state: FSMContext):
+    await matrix_goto_mm(query, state)
+    await EditRecordState.last()
+    await EditRecordState.next()
+
 @dp.callback_query_handler(state=EditRecordState.choosing_data)
 async def matrix_edit_record_choosing_data(query: CallbackQuery, state: FSMContext):
     async with state.proxy() as data:
