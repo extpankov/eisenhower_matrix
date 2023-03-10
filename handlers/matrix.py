@@ -125,14 +125,15 @@ async def matrix_add_record_name(message: Message, state: FSMContext):
     await AddRecordState.input_desc.set()
 
 @dp.message_handler(state=AddRecordState.input_desc)
-async def matrix_add_record_desc(message: Message, state: FSMContext):
+async def matrix_add_record_desc(message: Message = None, state: FSMContext = None, is_skipped: bool = False):
     async with state.proxy() as data:
-        data["new_record"].update(desc = message.text)
+        data["new_record"].update(desc = message.text if not is_skipped else None)
         query = data["query"]
         query_message_text = data["query_message_text"]
         active_type = data["active_type"]
         new_record = data["new_record"]
-    await message.delete()
+    if message != None:
+        await message.delete()
     is_urgent = False if active_type == 1 or active_type == 3 else True
     if is_urgent:
         msg = query_message_text +\
@@ -152,18 +153,21 @@ async def matrix_add_record_desc(message: Message, state: FSMContext):
 
 
 @dp.message_handler(state=AddRecordState.input_date)
-async def matrix_add_record_date(message: Message, state: FSMContext):
+async def matrix_add_record_date(message: Message = None, state: FSMContext = None, is_skipped: bool = False):
     async with state.proxy() as data:
-        data["new_record"].update(deadline = message.text)
+        data["new_record"].update(deadline = message.text if not is_skipped else None)
         query = data["query"]
         new_record = data["new_record"]
         active_type = data["active_type"]
-    await message.delete()
-    db.add_record(message.from_user.id, active_type, new_record["name"], new_record["desc"], new_record["deadline"])
+    if message != None:
+        await message.delete()
+    db.add_record(query.from_user.id, active_type, new_record["name"], new_record["desc"], new_record["deadline"])
     msg = "<b>Запись добавлена!</b>\n\n"+\
-    f"Название: {new_record['name']}\n" +\
-    f"Описание: {new_record['desc']}\n" +\
-    f"Дата завершения: {new_record['deadline']}"
+    f"Название: {new_record['name']}\n"
+    if new_record['desc'] != None:
+        msg += f"Описание: {new_record['desc']}\n"
+    if new_record['deadline'] != None:
+        msg += f"Дата завершения: {new_record['deadline']}\n"
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matrix_goto_mm"))
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
@@ -208,7 +212,7 @@ async def matrix_edit_record_choosing(query: CallbackQuery, state: FSMContext):
     is_urgent = False if active_type == 1 or active_type == 3 else True
     rec = db.get_records(query.from_user.id, active_type)[int(query.data)-1]
     start_msg = f"- {TYPES[active_type]} -\n" +\
-    f"{query.data}. {rec[4]}\n"
+    f"{query.data}. {rec[3]}\n"
 
     async with state.proxy() as data:
         data["start_msg"] = start_msg
@@ -354,4 +358,8 @@ skip_states = [AddRecordState.input_desc, AddRecordState.input_date]
 for ss in skip_states:
     @dp.callback_query_handler(text="skip", state=ss)
     async def matrix_skip(query: CallbackQuery, state: FSMContext):
-        print("text")
+        st = await state.get_state()
+        if st == 'AddRecordState:input_desc':
+            await matrix_add_record_desc(state = state, is_skipped=True)
+        elif st == 'AddRecordState:input_date':
+            await matrix_add_record_date(state = state, is_skipped=True)
