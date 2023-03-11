@@ -331,19 +331,24 @@ async def matrix_typed_form(query: CallbackQuery, state: FSMContext, type: int):
     async with state.proxy() as data:
             active_type = data["active_type"]
             data["query"] = query
-            data["query_message_text"] = query.message.text
-    msg = query.message.text +\
-    f"\n\n<i>Выберите номер задачи, которую нужно {types_text[type]}:</i>"
+    msg = await recs_to_msg(query.from_user.id, active_type) +\
+    f"\n<i>Выберите номер задачи, которую нужно {types_text[type]}:</i>"
     keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
-    keyboard.add(InlineKeyboardButton(text="Вернуться назад", callback_data="12312313213"))
+    keyboard.add(InlineKeyboardButton(text="Вернуться в главное меню", callback_data="matix_goto_mm"))
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await types_states[type].choosing.set()
 
+def create_record_handler(number: int):
+    @dp.callback_query_handler(text=types_of_records[number])
+    async def matrix_typed(query: CallbackQuery, state: FSMContext):
+        await matrix_typed_form(query, state, number)
+
+    matrix_typed.__name__ = types_of_records[number] + "_handler"
+    del matrix_typed
+
 types_of_records = ["matrix_remove_record", "matrix_edit_record", "matrix_delegation_record", "matrix_complete_record"]
-for type in range(len(types_of_records)):
-    @dp.message_handler(state=types_of_records[type])
-    async def matrix_typed(message: Message, state: FSMContext):
-        await matrix_typed_form(message, state, type)
+for t in range(len(types_of_records)):
+    create_record_handler(t)
 
 skip_states = [AddRecordState.input_desc, AddRecordState.input_date]
 for ss in skip_states:
