@@ -85,12 +85,6 @@ async def matrix_forward(query: CallbackQuery, state: FSMContext):
         data["active_type"] = active_type + 1
     await matrix_more(query, state)
 
-@dp.callback_query_handler(text="matrix_goto_mm")
-async def matrix_goto_mm(query: CallbackQuery, state: FSMContext):
-    async with state.proxy() as data:
-        data["active_type"] = 0
-    await matrix(query)
-
 @dp.callback_query_handler(text="matrix_edit")
 async def matrix_edit(query: CallbackQuery, state: FSMContext):
     keyboard = InlineKeyboardMarkup(row_width=2)
@@ -345,21 +339,11 @@ async def matrix_typed_form(query: CallbackQuery, state: FSMContext, type: int):
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await types_states[type].choosing.set()
 
-@dp.callback_query_handler(text="matrix_remove_record")
-async def matrix_remove_record(query: CallbackQuery, state: FSMContext):
-    await matrix_typed_form(query, state, 0)
-
-@dp.callback_query_handler(text="matrix_edit_record")
-async def matrix_edit_record(query: CallbackQuery, state: FSMContext):
-    await matrix_typed_form(query, state, 1)
-
-@dp.callback_query_handler(text="matrix_delegation_record")
-async def matrix_delegation_record(query: CallbackQuery, state: FSMContext):
-    await matrix_typed_form(query, state, 2)
-
-@dp.callback_query_handler(text="matrix_complete_record")
-async def matrix_complete_record(query: CallbackQuery, state: FSMContext):
-    await matrix_typed_form(query, state, 3)
+types_of_records = ["matrix_remove_record", "matrix_edit_record", "matrix_delegation_record", "matrix_complete_record"]
+for type in range(len(types_of_records)):
+    @dp.message_handler(state=types_of_records[type])
+    async def matrix_typed(message: Message, state: FSMContext):
+        await matrix_typed_form(message, state, type)
 
 skip_states = [AddRecordState.input_desc, AddRecordState.input_date]
 for ss in skip_states:
@@ -370,3 +354,15 @@ for ss in skip_states:
             await matrix_add_record_desc(state = state, is_skipped=True)
         elif st == 'AddRecordState:input_date':
             await matrix_add_record_date(state = state, is_skipped=True)
+
+goto_mm_states = [None, EditRecordState.choosing_data]
+for st in goto_mm_states:
+    @dp.callback_query_handler(text="matrix_goto_mm", state=st)
+    async def matrix_goto_mm(query: CallbackQuery, state: FSMContext):
+        async with state.proxy() as data:
+            data["active_type"] = 0
+        await matrix(query)
+
+        if st == "EditRecordState:choosing_data":
+            await EditRecordState.last()
+            await EditRecordState.next()
