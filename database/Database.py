@@ -51,3 +51,8 @@ class Database():
         self.cursor.execute("UPDATE `records` SET `is_completed` = 1 WHERE `id` = ?", (id,))
         self.conn.commit()
         return True
+
+    def delete_completed_records(self, user_id):
+        self.cursor.execute("DELETE FROM `records` WHERE `user_id` = ? AND `is_completed` = 1", (user_id,))
+        self.conn.commit()
+        return True
