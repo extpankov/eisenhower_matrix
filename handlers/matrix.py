@@ -32,6 +32,9 @@ class DelegationRecordState(StatesGroup):
 class CompletionRecordState(StatesGroup):
     choosing = State()
 
+class ExitState(StatesGroup):
+    exit = State()
+
 @dp.callback_query_handler(text="goto_matrix")
 async def matrix(query: CallbackQuery):
     msg = "<b>=== МАТРИЦА ЭЙЗЕНХАУЭРА ===</b>\n\n"+\
@@ -191,6 +194,10 @@ async def recs_to_msg(id, active_type, is_desc = None):
 
 @dp.callback_query_handler(state=RemoveRecordState.choosing)
 async def matrix_remove_record_choosing(query: CallbackQuery, state: FSMContext):
+    if query.data == "matrix_goto_mm":
+        await matrix_goto_mm(query, state)
+        return 0
+
     async with state.proxy() as data:
         active_type = data["active_type"]
         data["query"] = query
@@ -202,6 +209,9 @@ async def matrix_remove_record_choosing(query: CallbackQuery, state: FSMContext)
 
 @dp.callback_query_handler(state=EditRecordState.choosing)
 async def matrix_edit_record_choosing(query: CallbackQuery, state: FSMContext):
+    if query.data == "matrix_goto_mm":
+        await matrix_goto_mm(query, state)
+        return 0
     edit_record = [query.from_user.id, int(query.data) - 1] # user`s id and record`s quantity number
     async with state.proxy() as data:
         data["query"] = query
@@ -280,6 +290,9 @@ async def matrix_edit_record_editing_data(message: Message, state: FSMContext):
 
 @dp.callback_query_handler(state=DelegationRecordState.choosing)
 async def matrix_delegation_record_choosing(query: CallbackQuery, state: FSMContext):
+    if query.data == "matrix_goto_mm":
+        await matrix_goto_mm(query, state)
+        return 0
     number = int(query.data) - 1
     
     async with state.proxy() as data:
@@ -360,6 +373,10 @@ async def matrix_delegation_ending_date(message: Message, state: FSMContext):
 
 @dp.callback_query_handler(state=CompletionRecordState.choosing)
 async def matrix_complete_record_choosing(query: CallbackQuery, state: FSMContext):
+    if query.data == "matrix_goto_mm":
+        await matrix_goto_mm(query, state)
+        return 0
+    
     number = int(query.data) - 1
     
     async with state.proxy() as data:
@@ -395,7 +412,7 @@ async def matrix_typed_form(query: CallbackQuery, state: FSMContext, type: int):
     msg = recs +\
     f"\n<i>Выберите номер задачи, которую нужно {types_text[type]}:</i>"
     keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
-    keyboard.add(InlineKeyboardButton(text="↩ - Вернуться в главное меню", callback_data="matix_goto_mm"))
+    keyboard.add(InlineKeyboardButton(text="↩ - Вернуться в главное меню", callback_data="matrix_goto_mm"))
     await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
     await types_states[type].choosing.set()
 
@@ -421,14 +438,12 @@ for ss in skip_states:
         elif st == 'AddRecordState:input_date':
             await matrix_add_record_date(state = state, is_skipped=True)
 
-goto_mm_states = [None, EditRecordState.choosing_data]
+goto_mm_states = [None, EditRecordState.choosing_data, RemoveRecordState.choosing, EditRecordState.choosing, DelegationRecordState.choosing, CompletionRecordState.choosing]
+async def matrix_goto_mm(query: CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        data["active_type"] = 0
+    await matrix(query)
+    await ExitState.exit.set()
+    await ExitState.next()
 for st in goto_mm_states:
-    @dp.callback_query_handler(text="matrix_goto_mm", state=st)
-    async def matrix_goto_mm(query: CallbackQuery, state: FSMContext):
-        async with state.proxy() as data:
-            data["active_type"] = 0
-        await matrix(query)
-
-        if st == "EditRecordState:choosing_data":
-            await EditRecordState.last()
-            await EditRecordState.next()
+    dp.register_callback_query_handler(matrix_goto_mm, text="matrix_goto_mm", state=st)
