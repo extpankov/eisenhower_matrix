@@ -40,9 +40,11 @@ class Database():
         self.conn.commit()
         return True
     
-    def delegate_record(self, user_id, type, number, new_type):
+    def delegate_record(self, user_id, type, number, new_type, deadline = None):
         id = self.__get_record_id(user_id, type, number)
         self.cursor.execute("UPDATE `records` SET `type` =? WHERE `id` =?", (new_type, id))
+        if deadline != None:
+            self.cursor.execute("UPDATE `records` SET `deadline` =? WHERE `id` =?",(deadline, id))
         self.conn.commit()
         return True
 

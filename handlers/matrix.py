@@ -301,30 +301,52 @@ async def matrix_delegation_record_choosing_new_type(query: CallbackQuery, state
     new_active_type = int(query.data)
     async with state.proxy() as data:
         data["delegation_record"].append(new_active_type)
+        old_active_type = data["active_type"]
 
-    if new_active_type in [0, 2]:
+    if new_active_type in [0, 2] and old_active_type in [1, 3]:
         await matrix_input_deadline(query, state)
     else:
-        await matrix_delegation_ending(query, state, _from = 1)
+        await matrix_delegation_ending(query, state)
 
 
 async def matrix_input_deadline(query: CallbackQuery, state: FSMContext):
-    msg = "<b>Введите дату завершения задачи:</b"
+    msg = "<b>Введите дату завершения задачи:</b>"
     keyboard = InlineKeyboardMarkup()
     keyboard.add(InlineKeyboardButton(text="Пропустить", callback_data="matrix_input_deadline_cancel"))
     # !!!!
-    await query.message.edit_text(msg, keyboard, parse_mode="HTML")
+    await query.message.edit_text(msg, reply_markup = keyboard, parse_mode="HTML")
+
+    async with state.proxy() as data:
+        data["query"] = query
+
     await DelegationRecordState.next()
 
+
 @dp.callback_query_handler(state=DelegationRecordState.choosing_date)
-async def matrix_delegation_ending(query: CallbackQuery, state: FSMContext, _from = None):
+async def matrix_delegation_ending(query: CallbackQuery, state: FSMContext):
     async with state.proxy() as data:
         delegation_record = data["delegation_record"]
 
-    if _from != None:
-        db.delegate_record(query.from_user.id, delegation_record[0], delegation_record[1], delegation_record[2])
-    else:
-        db.delegate_record(query.from_user.id, delegation_record[0], delegation_record[1], delegation_record[2], deadline = query.data)
+    db.delegate_record(query.from_user.id, delegation_record[0], delegation_record[1], delegation_record[2])
+
+    msg = "<b>Запись делегирована!</b>\n\n"
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton(text="↩ - Вернуться в главное меню", callback_data="matrix_goto_mm"))
+    await query.message.edit_text(text=msg, reply_markup=keyboard, parse_mode="HTML")
+    try:
+        await DelegationRecordState.last()
+        await DelegationRecordState.next()
+    except:
+        await DelegationRecordState.next() 
+
+@dp.message_handler(state=DelegationRecordState.choosing_date)
+async def matrix_delegation_ending_date(message: Message, state: FSMContext):
+    await message.delete()
+    async with state.proxy() as data:
+        delegation_record = data["delegation_record"]
+        query = data["query"]
+
+    db.delegate_record(message.from_user.id, delegation_record[0], delegation_record[1], delegation_record[2], deadline = message.text)
 
     msg = "<b>Запись делегирована!</b>\n\n"
     keyboard = InlineKeyboardMarkup()
