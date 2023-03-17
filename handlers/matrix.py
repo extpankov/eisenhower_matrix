@@ -367,7 +367,10 @@ async def matrix_typed_form(query: CallbackQuery, state: FSMContext, type: int):
     async with state.proxy() as data:
             active_type = data["active_type"]
             data["query"] = query
-    msg = await recs_to_msg(query.from_user.id, active_type) +\
+            data["query_message_text"] = await recs_to_msg(query.from_user.id, active_type)
+
+            recs = data["query_message_text"]
+    msg = recs +\
     f"\n<i>Выберите номер задачи, которую нужно {types_text[type]}:</i>"
     keyboard = await get_numbers_keyboard(len(db.get_records(query.from_user.id, active_type)))
     keyboard.add(InlineKeyboardButton(text="↩ - Вернуться в главное меню", callback_data="matix_goto_mm"))
